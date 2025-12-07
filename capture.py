@@ -2,59 +2,50 @@ import cv2
 import mediapipe as mp
 import os
 
+# Ask for user's name
 name = input("Enter your name: ").strip()
 
+# Create dataset folder
 save_dir = f"dataset/{name}"
 os.makedirs(save_dir, exist_ok=True)
 
-# Maximum number of photos to capture
-MAX_PHOTOS = 100
+MAX_PHOTOS = 100  # Maximum number of face images to save
 
 mp_face = mp.solutions.face_mesh
 
-# Try different camera indices to find a working camera
-cap = None
-for cam_index in [0, 1, 2]:
-    print(f"Trying camera index {cam_index}...")
-    # Use DirectShow backend on Windows for better compatibility
-    test_cap = cv2.VideoCapture(cam_index, cv2.CAP_DSHOW)
-    
-    if test_cap.isOpened():
-        ret, frame = test_cap.read()
-        if ret and frame is not None and frame.size > 0:
-            # Check if frame is not all black
-            if frame.mean() > 5:  # Average pixel value > 5 means not black
-                cap = test_cap
-                print(f"Camera found at index {cam_index}")
-                break
-            else:
-                print(f"Camera {cam_index} returns black frames, trying next...")
-        else:
-            print(f"Camera {cam_index} cannot read frames, trying next...")
-        test_cap.release()
-    else:
-        print(f"Camera {cam_index} not available, trying next...")
+# ---------- FIXED CAMERA SELECTION ----------
+# Since test showed only camera 0 works, we force it
+print("Opening camera 0...")
 
-if cap is None:
-    print("ERROR: No working camera found!")
-    print("Please check:")
-    print("  1. Is your webcam connected?")
-    print("  2. Is another app using the camera?")
-    print("  3. Are camera permissions granted?")
+cap = cv2.VideoCapture(0)   # Linux compatible
+
+if not cap.isOpened():
+    print("ERROR: Cannot open /dev/video0!")
+    print("Make sure:")
+    print(" - Camera is connected")
+    print(" - No other app is using it")
+    print(" - Permissions allow access")
     exit(1)
+
+print("Camera 0 found and opened successfully.")
+# --------------------------------------------
 
 count = 0
 reached_limit = False
 
 with mp_face.FaceMesh(
-        max_num_faces=1,
-        refine_landmarks=True,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
+    max_num_faces=1,
+    refine_landmarks=True,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
 ) as fm:
 
     while True:
         ret, frame = cap.read()
+        if not ret:
+            print("ERROR: Failed to read frame from camera.")
+            break
+
         frame = cv2.flip(frame, 1)
         h, w, _ = frame.shape
 
@@ -68,32 +59,34 @@ with mp_face.FaceMesh(
                 x_min, x_max = min(xs), max(xs)
                 y_min, y_max = min(ys), max(ys)
 
-                # Draw rectangle
+                # Draw face rectangle
                 cv2.rectangle(frame, (x_min, y_min), (x_max, y_max),
                               (0, 255, 0), 2)
 
-                # Crop & save
+                # Crop face region
                 face_crop = frame[y_min:y_max, x_min:x_max]
+                
                 if face_crop.size > 0:
                     cv2.imwrite(f"{save_dir}/{count}.jpg", face_crop)
                     count += 1
 
-                    # Stop when we have enough photos
-                    if count >= MAX_PHOTOS:
-                        print(f"Reached {MAX_PHOTOS} photos for '{name}'. Stopping capture.")
-                        reached_limit = True
-                        break
+                # Stop automatically when enough images are collected
+                if count >= MAX_PHOTOS:
+                    print(f"Captured {MAX_PHOTOS} images for '{name}'.")
+                    reached_limit = True
+                    break
 
         cv2.imshow("Capturing Faces", frame)
 
-        # If we've reached the limit inside the face loop, break the main loop
         if reached_limit:
             break
 
+        # Press 'q' to quit manually
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
 cap.release()
 cv2.destroyAllWindows()
 
-print(f"Saved {count} images to {save_dir}")
+print(f"Saved {count} images to: {save_dir}")
+
