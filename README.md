@@ -169,3 +169,4 @@ This project is open source and available for educational purposes.
 - **MediaPipe**: Face detection and landmark estimation
 - **LBPH**: Face recognition algorithm
 # Facial-Recognition
+# Facial-Recognition
